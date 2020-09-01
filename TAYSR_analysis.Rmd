@@ -1,0 +1,216 @@
+---
+title: "TAYSR_analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(lme4)
+```
+
+```{r}
+d20 <- 
+  read.csv("TAYSR_2020_ALL.csv")
+d20$COMP <- factor(d20$COMP)
+d20$COMPGAP <- factor(d20$COMPGAP)
+d20$TRT <- factor(d20$TRT)
+d20$SPP <- factor(d20$SPP)
+d20$P.NP <- factor(d20$P.NP)
+d20
+
+treatments <- data.frame(TRT = c("M", "MH", "MBB", "BB"), 
+                         Treatment = c("Mastication only", 
+                                       "Mastication + herbicide", 
+                                       "Mastication + burn", 
+                                       "Burn only" ))
+
+d20 <- left_join(d20, treatments)
+
+d20
+```
+
+```{r}
+center <- function(x) {
+  (x - mean(x))/ sd(x)
+}
+```
+
+```{r}
+d20$cen_PER_DIFF <- center(d20$PER_DIFF)
+ggplot(d20) + geom_histogram(aes(x = cen_PER_DIFF))
+```
+
+
+
+```{r}
+d20_lm <- lm(cen_PER_DIFF ~ TRT*SPP + COMPGAP, data = d20)
+
+op <- par(mfrow = c(2, 2), mar = c(4, 4, 2, 2))
+plot(d20_lm, which = c(1))
+plot(d20$TRT, resid(d20_lm), xlab = "TRT", ylab = "Residuals")
+plot(d20$SPP, resid(d20_lm), xlab = "SPP", ylab = "Residuals")
+plot(d20$COMPGAP, resid(d20_lm), xlab = "COMPGAP", ylab = "Residuals")
+par(op)
+
+ggplot() + geom_histogram(aes(x = resid(d20_lm)))
+
+#don't know if there's much to gain from this figure since they're all categorical variables
+Z <- cbind(d20$PER_DIFF, d20$TRT, d20$SPP, d20$COMPGAP)
+colnames(Z) <- c("PER_DIFF", "TRT", "SPP", "COMPGAP")
+#pairs(Z, lower.panel = panel.smooth, upper.panel = panel.cor, diag.panel = panel.hist)
+
+
+shapiro.test(residuals(d20_lm))
+car::leveneTest(PER_DIFF ~ TRT, data = d20)
+summary(d20_lm)
+```
+
+```{r}
+d20_cln <- d20[-c(358, 329, 248, 213, 172, 92, 5, 2, 401, 424, 374, 87, 96, 253, 194),]
+d20_cln_lm <- lm(PER_DIFF ~ TRT*SPP + COMPGAP, data = d20_cln)
+
+op <- par(mfrow = c(2, 2), mar = c(4, 4, 2, 2))
+plot(fitted(d20_cln_lm), rstandard(d20_cln_lm), xlab = "Fitted values", ylab = "Standardized residuals")
+plot(d20_cln$TRT, rstandard(d20_cln_lm), xlab = "TRT", ylab = "Standardized residuals")
+plot(d20_cln$SPP, rstandard(d20_cln_lm), xlab = "SPP", ylab = "Standardized residuals")
+plot(d20_cln$COMPGAP, rstandard(d20_cln_lm), xlab = "COMPGAP", ylab = "Standardized residuals")
+par(op)
+
+ggplot() + geom_histogram(aes(x = rstandard(d20_cln_lm)))
+
+op <- par(mfrow = c(2, 2), mar = c(4, 4, 2, 2))
+plot(d20_cln_lm)
+par(op)
+
+
+shapiro.test(residuals(d20_cln_lm))
+car::leveneTest(PER_DIFF ~ TRT, data = d20_cln)
+
+summary(d20_cln_lm)
+drop1(d20_cln_lm, test = "F")
+anova(d20_cln_lm)
+
+```
+
+
+```{r}
+d20_TRT_mean <- d20_cln %>% 
+  group_by(Treatment) %>% 
+  summarise(mean = mean(PER_DIFF))
+
+
+d20_TRTSPP_mean <- d20_cln %>% 
+  group_by(Treatment, SPP) %>% 
+  summarise(mean = mean(PER_DIFF))
+d20_TRTSPP_mean$Species <- d20_TRTSPP_mean$SPP
+
+ggplot() + 
+  geom_boxplot(data = d20_cln, aes(x = reorder(Treatment, -PER_DIFF, FUN = median), y = PER_DIFF), outlier.fill = NULL) + 
+  #geom_point(data = d20_TRT_mean, aes(x = Treatment, y = mean), col = "red", pch = 3, size = 2) + 
+  labs(x = "Treatment", 
+       y = "Percent difference [%]") + 
+  geom_line(data = d20_TRTSPP_mean, aes(x = Treatment, y = mean, group = Species, colour = Species)) + 
+  geom_point(data = d20_TRTSPP_mean, aes(x = Treatment, y = mean, colour = Species), size = 0.8)
+```
+
+```{r}
+d20_SPP_mean <- d20_cln %>% 
+  group_by(SPP) %>% 
+  summarise(mean = mean(PER_DIFF))
+d20_SPP_mean$Species <- d20_SPP_mean$SPP
+
+d20_cln$Species <- d20_cln$SPP
+
+ggplot(d20_cln) + 
+  geom_boxplot(aes(x = reorder(Species, PER_DIFF, FUN = median), y = PER_DIFF, fill = Species)) + 
+  geom_point(data = d20_SPP_mean, aes(x = Species, y = mean), col = "red", pch = 3, size = 2) + 
+  labs(x = "Species", 
+       y = "Percent difference [%]") + 
+  theme(legend.position = "none")
+```
+
+```{r}
+ggplot() + 
+  geom_boxplot(data = d20_cln, aes(reorder(Treatment, -PER_DIFF, FUN = median), y = PER_DIFF)) + 
+  geom_point(data = d20_TRT_mean, aes(x = Treatment, y = mean), col = "red", pch = 3, size = 2) + 
+  labs(x = "Treatment", 
+       y = "Percent difference [%]")
+```
+
+```{r}
+DB_mean <- d20_cln %>% 
+  group_by(TRT, P.NP) %>% 
+  summarise(DB = mean(DEAD_BRANCHES))
+
+ggplot(d20_cln) + 
+  geom_boxplot(aes(x = TRT, y = DEAD_BRANCHES, col = P.NP))
+```
+
+
+
+```{r}
+# d18 <- read.csv('TAYSR_2018_ALL.csv')
+# d18$CGT <- paste(d18$COMPGAP, d18$TREE., sep = "")
+# 
+# d13 <- read.csv('TAYSR_2013_ALL.csv')
+# d13$CGT <- paste(d13$COMPGAP, d13$TREE., sep = "")
+# 
+# d20$CGT <- paste(d20$COMPGAP, d20$TREE., sep = "")
+# 
+# d.all <- left_join(x = d20, y = d18, by = c('CGT' = 'CGT')) %>% 
+#   left_join(y = d13, by = c('CGT' = 'CGT')) %>% 
+#   rename(c("DBH_20" = "DBH_IN", "DBH_18" = "DBH.x", "DBH_13" = "DBH.y"))
+# d.all
+# 
+# write_excel_csv(d.all, path = "C:/Users/Rob/Desktop/d.all.csv")
+```
+
+
+```{r}
+d13 <- read.csv('TAYSR_2013_ALL.csv')
+d18 <- read.csv('TAYSR_2018_ALL.csv')
+plotsize_13_18 <- read.csv('plotsize_13_18.csv')
+```
+
+```{r}
+dBA13 <- 
+  d13 %>% 
+  mutate(BA = (pi*(DBH/24)^2)) %>%
+  group_by(TRT, COMPGAP) %>% 
+  summarise(sumBA = sum(BA)) %>% 
+  left_join(plotsize_13_18) %>% 
+  mutate(BA13_AC = sumBA/SIZE13_AC)
+
+dBA18 <- 
+  d18 %>% 
+  mutate(BA = (pi*(DBH/24)^2)) %>%
+  group_by(TRT, COMPGAP) %>% 
+  summarise(sumBA = sum(BA)) %>% 
+  left_join(plotsize_13_18) %>% 
+  mutate(BA18_AC = sumBA/SIZE18_AC)
+
+d13_18BA <- 
+  dBA13 %>% left_join(dBA18, by = c("COMPGAP" = "COMPGAP")) %>% 
+  mutate(BA13_18 = (BA18_AC - BA13_AC)/(BA13_AC*5)*100) %>% 
+  select(TRT.x, COMPGAP, SIZE13_AC.x, SIZE18_AC.x, BA13_AC, BA18_AC, BA13_18)
+colnames(d13_18BA) <- (c("TRT", "COMPGAP", "SIZE13_AC", "SIZE18_AC", "BA13_AC", "BA18_AC", "BA13_18"))
+d13_18BA
+```
+
+```{r}
+ggplot(d13_18BA) + 
+  geom_col(aes(x = TRT, y = BA13_18))
+```
+
+```{r}
+SBA_lm <- lm(BA13_18 ~ TRT, d13_18BA)
+plot(SBA_lm)
+SBA_aov <- aov(data = d13_18BA, formula = BA13_18 ~ TRT)
+summary(SBA_aov)
+TukeyHSD(SBA_aov)
+```
+
