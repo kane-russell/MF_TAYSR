@@ -12,6 +12,8 @@ library(tidyverse)
 library(lme4)
 ```
 
+## Individual-level growth response
+
 ```{r}
 d20 <- 
   read.csv("TAYSR_2020_ALL.csv")
@@ -20,7 +22,7 @@ d20$COMPGAP <- factor(d20$COMPGAP)
 d20$TRT <- factor(d20$TRT)
 d20$SPP <- factor(d20$SPP)
 d20$P.NP <- factor(d20$P.NP)
-d20
+d20$REPL <- factor(d20$REPL)
 
 treatments <- data.frame(TRT = c("M", "MH", "MBB", "BB"), 
                          Treatment = c("Mastication only", 
@@ -29,20 +31,11 @@ treatments <- data.frame(TRT = c("M", "MH", "MBB", "BB"),
                                        "Burn only" ))
 
 d20 <- left_join(d20, treatments)
+d20$scPDIF <- scale(d20$PER_DIFF)
 
 d20
 ```
 
-```{r}
-center <- function(x) {
-  (x - mean(x))/ sd(x)
-}
-```
-
-```{r}
-d20$cen_PER_DIFF <- center(d20$PER_DIFF)
-ggplot(d20) + geom_histogram(aes(x = cen_PER_DIFF))
-```
 
 
 
@@ -96,6 +89,18 @@ anova(d20_cln_lm)
 
 ```
 
+```{r}
+rstatix::identify_outliers(group_by(d20, TRT, SPP), variable = 'PER_DIFF')
+```
+
+
+```{r}
+d20_cln_aov <- aov(PER_DIFF ~ TRT*SPP + COMPGAP, data = d20_cln)
+summary(d20_cln_aov)
+d20_cln_Tuk <- TukeyHSD(d20_cln_aov)
+plot(d20_cln_Tuk)
+```
+
 
 ```{r}
 d20_TRT_mean <- d20_cln %>% 
@@ -127,7 +132,7 @@ d20_cln$Species <- d20_cln$SPP
 
 ggplot(d20_cln) + 
   geom_boxplot(aes(x = reorder(Species, PER_DIFF, FUN = median), y = PER_DIFF, fill = Species)) + 
-  geom_point(data = d20_SPP_mean, aes(x = Species, y = mean), col = "red", pch = 3, size = 2) + 
+  geom_point(data = d20_SPP_mean, aes(x = Species, y = mean), col = "red", pch = 4, size = 2) + 
   labs(x = "Species", 
        y = "Percent difference [%]") + 
   theme(legend.position = "none")
@@ -136,7 +141,7 @@ ggplot(d20_cln) +
 ```{r}
 ggplot() + 
   geom_boxplot(data = d20_cln, aes(reorder(Treatment, -PER_DIFF, FUN = median), y = PER_DIFF)) + 
-  geom_point(data = d20_TRT_mean, aes(x = Treatment, y = mean), col = "red", pch = 3, size = 2) + 
+  geom_point(data = d20_TRT_mean, aes(x = Treatment, y = mean), col = "red", pch = 4, size = 2) + 
   labs(x = "Treatment", 
        y = "Percent difference [%]")
 ```
@@ -169,6 +174,7 @@ ggplot(d20_cln) +
 # write_excel_csv(d.all, path = "C:/Users/Rob/Desktop/d.all.csv")
 ```
 
+## Stand-level growth response
 
 ```{r}
 d13 <- read.csv('TAYSR_2013_ALL.csv')
@@ -212,5 +218,26 @@ plot(SBA_lm)
 SBA_aov <- aov(data = d13_18BA, formula = BA13_18 ~ TRT)
 summary(SBA_aov)
 TukeyHSD(SBA_aov)
+```
+
+
+
+
+```{r}
+ggplot(d20, aes(y = REPL, x = PER_DIFF)) + geom_point() + facet_grid(TRT ~ .) + xlim(-80, 130)
+
+ggplot(d20_cln, aes(y = REPL, x = PER_DIFF)) + geom_point() + facet_grid(TRT ~ .) + xlim(-80, 130)
+
+
+ggplot(d20, aes(y = REPL, x = PER_DIFF)) + geom_point() + facet_grid(SPP ~ .) + xlim(-80, 130)
+
+ggplot(d20_cln, aes(y = REPL, x = PER_DIFF)) + geom_point() + facet_grid(SPP ~ .) + xlim(-80, 130)
+
+```
+
+```{r}
+d20_naov <- lmer(scPDIF ~ TRT + SPP + (1 | REPL/TRT), data = d20)
+
+summary(d20_naov)
 ```
 
