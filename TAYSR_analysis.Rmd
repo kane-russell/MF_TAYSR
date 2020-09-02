@@ -40,7 +40,7 @@ d20
 
 
 ```{r}
-d20_lm <- lm(cen_PER_DIFF ~ TRT*SPP + COMPGAP, data = d20)
+d20_lm <- lm(scPDIF ~ TRT*SPP + REPL, data = d20)
 
 op <- par(mfrow = c(2, 2), mar = c(4, 4, 2, 2))
 plot(d20_lm, which = c(1))
@@ -95,26 +95,31 @@ rstatix::identify_outliers(group_by(d20, TRT, SPP), variable = 'PER_DIFF')
 
 
 ```{r}
-d20_cln_aov <- aov(PER_DIFF ~ TRT*SPP + COMPGAP, data = d20_cln)
+d20_cln_aov <- aov(scPDIF ~ TRT*SPP + REPL, data = d20_cln)
 summary(d20_cln_aov)
 d20_cln_Tuk <- TukeyHSD(d20_cln_aov)
 plot(d20_cln_Tuk)
 ```
 
+```{r}
+d20_noGS <- d20_cln %>% 
+  filter(SPP != 'GS')
+```
+
 
 ```{r}
-d20_TRT_mean <- d20_cln %>% 
+d20_TRT_mean <- d20_noGS %>% 
   group_by(Treatment) %>% 
   summarise(mean = mean(PER_DIFF))
 
 
-d20_TRTSPP_mean <- d20_cln %>% 
+d20_TRTSPP_mean <- d20_noGS %>% 
   group_by(Treatment, SPP) %>% 
   summarise(mean = mean(PER_DIFF))
 d20_TRTSPP_mean$Species <- d20_TRTSPP_mean$SPP
 
 ggplot() + 
-  geom_boxplot(data = d20_cln, aes(x = reorder(Treatment, -PER_DIFF, FUN = median), y = PER_DIFF), outlier.fill = NULL) + 
+  geom_boxplot(data = d20_noGS, aes(x = reorder(Treatment, -PER_DIFF, FUN = median), y = PER_DIFF), outlier.fill = NULL) + 
   #geom_point(data = d20_TRT_mean, aes(x = Treatment, y = mean), col = "red", pch = 3, size = 2) + 
   labs(x = "Treatment", 
        y = "Percent difference [%]") + 
@@ -123,14 +128,14 @@ ggplot() +
 ```
 
 ```{r}
-d20_SPP_mean <- d20_cln %>% 
+d20_SPP_mean <- d20_noGS %>% 
   group_by(SPP) %>% 
   summarise(mean = mean(PER_DIFF))
 d20_SPP_mean$Species <- d20_SPP_mean$SPP
 
-d20_cln$Species <- d20_cln$SPP
+d20_noGS$Species <- d20_noGS$SPP
 
-ggplot(d20_cln) + 
+ggplot(d20_noGS) + 
   geom_boxplot(aes(x = reorder(Species, PER_DIFF, FUN = median), y = PER_DIFF, fill = Species)) + 
   geom_point(data = d20_SPP_mean, aes(x = Species, y = mean), col = "red", pch = 4, size = 2) + 
   labs(x = "Species", 
@@ -140,7 +145,7 @@ ggplot(d20_cln) +
 
 ```{r}
 ggplot() + 
-  geom_boxplot(data = d20_cln, aes(reorder(Treatment, -PER_DIFF, FUN = median), y = PER_DIFF)) + 
+  geom_boxplot(data = d20_noGS, aes(reorder(Treatment, -PER_DIFF, FUN = median), y = PER_DIFF)) + 
   geom_point(data = d20_TRT_mean, aes(x = Treatment, y = mean), col = "red", pch = 4, size = 2) + 
   labs(x = "Treatment", 
        y = "Percent difference [%]")
@@ -236,8 +241,123 @@ ggplot(d20_cln, aes(y = REPL, x = PER_DIFF)) + geom_point() + facet_grid(SPP ~ .
 ```
 
 ```{r}
-d20_naov <- lmer(scPDIF ~ TRT + SPP + (1 | REPL/TRT), data = d20)
+d20_naov <- lmerTest::lmer(PER_DIFF ~ Treatment*SPP + (1 | REPL/TRT), data = d20_noGS)
 
 summary(d20_naov)
+#summary(allFit(d20_naov))
+```
+
+```{r}
+plot(d20_naov)
+
+plot(fitted(d20_naov), residuals(d20_naov, type = "pearson",
+    scaled = TRUE))
+
+qqnorm(resid(d20_naov))
+qqline(resid(d20_naov))
+```
+
+```{r}
+library(sjPlot)
+plot_model(d20_naov, type = "eff", terms = "Treatment", sort.est = TRUE) + 
+  labs(y = 'Percent difference [%]', title = element_blank())
+
+plot_model(d20_naov, type = "pred", terms = "Treatment", sort.est = TRUE) + 
+  labs(y = 'Percent difference [%]', title = element_blank())
+```
+
+```{r}
+naov_TRTSPPeff <- as.data.frame(effect('Treatment*SPP', d20_naov))
+
+naov_TRTeff <- as.data.frame(effect("Treatment", d20_naov))
+
+ggplot() + 
+  geom_pointrange(data = naov_TRTeff,
+                  aes(y = fit,
+                      x = reorder(x = Treatment, X = -fit, FUN = mean),
+                      ymin = lower,
+                      ymax = upper),
+                  fatten = 2.5) +
+  geom_line(data = naov_TRTSPPeff, 
+            aes(x = Treatment, 
+                y = fit, 
+                group = SPP, 
+                colour = SPP)) + 
+  # geom_ribbon(data = naov_TRTSPPeff, 
+  #             aes(x = Treatment, 
+  #                 y = fit, 
+  #                 ymin = lower, 
+  #                 ymax = upper, 
+  #                 group = SPP, 
+  #                 colour = SPP), 
+  #             linetype = 2, 
+  #             alpha = 0.1) + 
+  labs(y = "Percent difference [%]",
+       x = 'Treatment')
+```
+
+```{r}
+naov_SPPeff <- as.data.frame(effect('SPP', d20_naov))
+
+ggplot() + 
+  geom_pointrange(data = naov_SPPeff,
+                  aes(y = fit,
+                      x = reorder(x = SPP, X = fit, FUN = mean),
+                      ymin = lower,
+                      ymax = upper, 
+                      colour = SPP),
+                  fatten = 2.5) +
+  labs(y = "Percent difference [%]",
+       x = 'Species') + 
+  theme(legend.position = 'none')
+```
+
+```{r}
+#plot(effect('Treatment*SPP', d20_naov))
+
+naov_TRTSPPeff <- left_join(naov_TRTSPPeff, treatments)
+
+ggplot(naov_TRTSPPeff) + 
+  geom_point(aes(x = Treatment, 
+                   y = fit,
+                   group = SPP, 
+                   colour = SPP)) + 
+  geom_line(aes(x = Treatment, 
+                y = fit, 
+                group = SPP, 
+                colour = SPP)) +
+  theme(legend.position = 'none') + 
+  labs(x = 'Treatment', 
+       y = "Percent difference [%]")
+
+
+ggplot(naov_TRTSPPeff) + 
+  geom_pointrange(aes(x = TRT, 
+                   y = fit, 
+                   ymin = lower, 
+                   ymax = upper, 
+                   group = SPP, 
+                   colour = SPP), 
+                  fatten = 2.5) + 
+  geom_line(aes(x = TRT, 
+                y = fit, 
+                group = SPP, 
+                colour = SPP)) +
+  facet_wrap(~SPP) + 
+  theme(legend.position = 'none') + 
+  labs(x = 'Treatment', 
+       y = "Percent difference [%]")
+```
+
+```{r}
+library(emmeans)
+
+emmeans(d20_naov, list(pairwise ~ Treatment), adjust = 'tukey')
+
+emmeans(d20_naov, list(pairwise ~ SPP), adjust = 'tukey')
+
+emmeans(d20_naov, list(pairwise ~ Treatment | SPP), adjust = 'tukey')
+
+emmip(d20_naov, SPP ~ Treatment) + labs(x = 'Treatment', y = 'Percent difference [%]')
 ```
 
