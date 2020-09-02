@@ -207,24 +207,56 @@ dBA18 <-
 d13_18BA <- 
   dBA13 %>% left_join(dBA18, by = c("COMPGAP" = "COMPGAP")) %>% 
   mutate(BA13_18 = (BA18_AC - BA13_AC)/(BA13_AC*5)*100) %>% 
-  select(TRT.x, COMPGAP, SIZE13_AC.x, SIZE18_AC.x, BA13_AC, BA18_AC, BA13_18)
-colnames(d13_18BA) <- (c("TRT", "COMPGAP", "SIZE13_AC", "SIZE18_AC", "BA13_AC", "BA18_AC", "BA13_18"))
+  select(TRT.x, COMPGAP, SIZE13_AC.x, SIZE18_AC.x, BA13_AC, BA18_AC, BA13_18) %>% 
+  left_join(treatments, by = c('TRT.x' = 'TRT'))
+colnames(d13_18BA) <- (c("TRT", "COMPGAP", "SIZE13_AC", "SIZE18_AC", "BA13_AC", "BA18_AC", "BA13_18", "Treatment"))
 d13_18BA
 ```
 
 ```{r}
+BA_mean <- 
+  d13_18BA %>% 
+  group_by(Treatment) %>% 
+  summarise(mean = mean(BA13_18))
+
 ggplot(d13_18BA) + 
-  geom_col(aes(x = TRT, y = BA13_18))
+  geom_boxplot(aes(x = reorder(Treatment, BA13_18, FUN = median), y = BA13_18)) + 
+  geom_point(data = BA_mean, aes(x = Treatment, y = mean), col = "red", pch = 4, size = 2) + 
+  labs(x = 'Treatment', 
+       y = 'Relativized basal area increment [%/yr]')
 ```
 
 ```{r}
 SBA_lm <- lm(BA13_18 ~ TRT, d13_18BA)
 plot(SBA_lm)
+
+shapiro.test(residuals(SBA_lm))
+car::leveneTest(BA13_18 ~ TRT, d13_18BA)
+
 SBA_aov <- aov(data = d13_18BA, formula = BA13_18 ~ TRT)
 summary(SBA_aov)
 TukeyHSD(SBA_aov)
 ```
 
+```{r}
+plot(SBA_aov)
+
+```
+
+
+```{r}
+BAeff <- as.data.frame(effect('TRT', SBA_aov)) %>% 
+  left_join(treatments)
+
+ggplot(BAeff) + 
+  geom_pointrange(aes(x = reorder(Treatment, fit, FUN = mean), 
+                      y = fit, 
+                      ymin = lower, 
+                      ymax = upper), 
+                  fatten = 2.5) + 
+  labs(x = 'Treatment', 
+       y = 'Relativized basal area increment [%/yr]')
+```
 
 
 
