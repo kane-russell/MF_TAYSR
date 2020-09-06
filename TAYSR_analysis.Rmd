@@ -10,6 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 library(tidyverse)
 library(lme4)
+library(effects)
 ```
 
 ## Individual-level growth response
@@ -24,11 +25,15 @@ d20$SPP <- factor(d20$SPP)
 d20$P.NP <- factor(d20$P.NP)
 d20$REPL <- factor(d20$REPL)
 
-treatments <- data.frame(TRT = c("M", "MH", "MBB", "BB"), 
-                         Treatment = c("Mastication only", 
+treatments <- data.frame(TRT = as.factor(c("M", "MH", "MBB", "BB")), 
+                         Treatment = as.factor(c("Mastication only", 
                                        "Mastication + herbicide", 
                                        "Mastication + burn", 
-                                       "Burn only" ))
+                                       "Burn only" ))) %>% 
+              mutate(Treatment = fct_relevel(Treatment, "Burn only", 
+                                             "Mastication only", 
+                                             "Mastication + burn", 
+                                             "Mastication + herbicide"))
 
 d20 <- left_join(d20, treatments)
 d20$scPDIF <- scale(d20$PER_DIFF)
@@ -119,7 +124,7 @@ d20_TRTSPP_mean <- d20_noGS %>%
 d20_TRTSPP_mean$Species <- d20_TRTSPP_mean$SPP
 
 ggplot() + 
-  geom_boxplot(data = d20_noGS, aes(x = reorder(Treatment, -PER_DIFF, FUN = median), y = PER_DIFF), outlier.fill = NULL) + 
+  geom_boxplot(data = d20_noGS, aes(x = reorder(Treatment, PER_DIFF, FUN = median), y = PER_DIFF), outlier.fill = NULL) + 
   #geom_point(data = d20_TRT_mean, aes(x = Treatment, y = mean), col = "red", pch = 3, size = 2) + 
   labs(x = "Treatment", 
        y = "Percent difference [%]") + 
@@ -145,7 +150,7 @@ ggplot(d20_noGS) +
 
 ```{r}
 ggplot() + 
-  geom_boxplot(data = d20_noGS, aes(reorder(Treatment, -PER_DIFF, FUN = median), y = PER_DIFF)) + 
+  geom_boxplot(data = d20_noGS, aes(reorder(Treatment, PER_DIFF, FUN = median), y = PER_DIFF)) + 
   geom_point(data = d20_TRT_mean, aes(x = Treatment, y = mean), col = "red", pch = 4, size = 2) + 
   labs(x = "Treatment", 
        y = "Percent difference [%]")
@@ -273,7 +278,7 @@ ggplot(d20_cln, aes(y = REPL, x = PER_DIFF)) + geom_point() + facet_grid(SPP ~ .
 ```
 
 ```{r}
-d20_naov <- lmerTest::lmer(PER_DIFF ~ Treatment*SPP + (1 | REPL/TRT), data = d20_noGS)
+d20_naov <- lmerTest::lmer(PER_DIFF ~ Treatment*SPP + (1 | REPL/Treatment), data = d20_noGS)
 
 summary(d20_naov)
 #summary(allFit(d20_naov))
@@ -303,10 +308,22 @@ naov_TRTSPPeff <- as.data.frame(effect('Treatment*SPP', d20_naov))
 
 naov_TRTeff <- as.data.frame(effect("Treatment", d20_naov))
 
+
 ggplot() + 
   geom_pointrange(data = naov_TRTeff,
                   aes(y = fit,
-                      x = reorder(x = Treatment, X = -fit, FUN = mean),
+                      x = reorder(Treatment, fit, median),
+                      ymin = lower,
+                      ymax = upper),
+                  fatten = 2.5) + 
+  labs(y = "Percent difference [%]",
+       x = 'Treatment')
+
+
+ggplot() + 
+  geom_pointrange(data = naov_TRTeff,
+                  aes(y = fit,
+                      x = reorder(Treatment, fit, median),
                       ymin = lower,
                       ymax = upper),
                   fatten = 2.5) +
@@ -388,8 +405,15 @@ emmeans(d20_naov, list(pairwise ~ Treatment), adjust = 'tukey')
 
 emmeans(d20_naov, list(pairwise ~ SPP), adjust = 'tukey')
 
-emmeans(d20_naov, list(pairwise ~ Treatment | SPP), adjust = 'tukey')
+emmeans(d20_naov, list(revpairwise ~ SPP | Treatment), adjust = 'tukey')
+emmeans(d20_naov, list(revpairwise ~ Treatment | SPP), adjust = 'tukey')
 
 emmip(d20_naov, SPP ~ Treatment) + labs(x = 'Treatment', y = 'Percent difference [%]')
+```
+
+```{r}
+TRTSPP_pairs <- as.data.frame(emmeans(d20_naov, list(revpairwise ~ Treatment | SPP), adjust = 'tukey')$`pairwise differences of Treatment | SPP`)
+
+write_excel_csv(TRTSPP_pairs, "/Users/kanerussell/Documents/MF/TAYSR/R Code/MF_TAYSR.TRTSPP_pairs.csv")
 ```
 
