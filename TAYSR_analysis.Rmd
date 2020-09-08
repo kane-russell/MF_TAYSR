@@ -215,6 +215,15 @@ d13_18BA <-
   select(TRT.x, COMPGAP, SIZE13_AC.x, SIZE18_AC.x, BA13_AC, BA18_AC, BA13_18) %>% 
   left_join(treatments, by = c('TRT.x' = 'TRT'))
 colnames(d13_18BA) <- (c("TRT", "COMPGAP", "SIZE13_AC", "SIZE18_AC", "BA13_AC", "BA18_AC", "BA13_18", "Treatment"))
+
+d13_18BA <- d13_18BA %>% 
+  mutate(REPL = as.factor(c(1, 2, 3, 
+                  1, 2, 3, 4, 
+                  1, 2, 3, 
+                  1, 2, 3, 4)), 
+         COMPGAP = as.factor(COMPGAP), 
+         TRT = as.factor(TRT))
+
 d13_18BA
 ```
 
@@ -225,7 +234,7 @@ BA_mean <-
   summarise(mean = mean(BA13_18))
 
 ggplot(d13_18BA) + 
-  geom_boxplot(aes(x = reorder(Treatment, BA13_18, FUN = median), y = BA13_18)) + 
+  geom_boxplot(aes(x = Treatment, y = BA13_18)) + 
   geom_point(data = BA_mean, aes(x = Treatment, y = mean), col = "red", pch = 4, size = 2) + 
   labs(x = 'Treatment', 
        y = 'Relativized basal area increment [%/yr]')
@@ -238,9 +247,15 @@ plot(SBA_lm)
 shapiro.test(residuals(SBA_lm))
 car::leveneTest(BA13_18 ~ TRT, d13_18BA)
 
-SBA_aov <- aov(data = d13_18BA, formula = BA13_18 ~ TRT)
+SBA_aov <- aov(data = d13_18BA, formula = BA13_18 ~ Treatment)
 summary(SBA_aov)
-TukeyHSD(SBA_aov)
+SBA_Tuk <- TukeyHSD(SBA_aov)
+SBA_Tuk
+
+SBA_pairs <- emmeans(SBA_aov, list(revpairwise ~ Treatment), adjust = 'tukey')
+SBA_pairs
+
+#write_excel_csv(as.data.frame(SBA_pairs$`pairwise differences of Treatment`), "/Users/kanerussell/Documents/MF/TAYSR/R Code/SBA_Tuk.csv")
 ```
 
 ```{r}
@@ -250,19 +265,31 @@ plot(SBA_aov)
 
 
 ```{r}
-BAeff <- as.data.frame(effect('TRT', SBA_aov)) %>% 
-  left_join(treatments)
+BAeff <- as.data.frame(effect('Treatment', SBA_aov)) %>%
+  mutate(Treatment = fct_relevel(Treatment, "Burn only", 
+                                             "Mastication only", 
+                                             "Mastication + burn", 
+                                             "Mastication + herbicide"))
 
-ggplot(BAeff) + 
-  geom_pointrange(aes(x = reorder(Treatment, fit, FUN = mean), 
-                      y = fit, 
-                      ymin = lower, 
+ggplot(BAeff, aes(x = Treatment, 
+                      y = fit)) + 
+  geom_pointrange(aes(ymin = lower, 
                       ymax = upper), 
                   fatten = 2.5) + 
+  geom_text(aes(label = c('a', 'ab', 'a', 'b')), 
+            nudge_x = -0.02, 
+            nudge_y = 2, 
+            hjust = 1, 
+            vjust = 0, 
+            size = 3) + 
   labs(x = 'Treatment', 
        y = 'Relativized basal area increment [%/yr]')
+
 ```
 
+```{r}
+emm
+```
 
 
 ```{r}
@@ -364,56 +391,69 @@ ggplot() +
 ```{r}
 #plot(effect('Treatment*SPP', d20_naov))
 
-naov_TRTSPPeff <- left_join(naov_TRTSPPeff, treatments)
-
-ggplot(naov_TRTSPPeff) + 
-  geom_point(aes(x = Treatment, 
-                   y = fit,
-                   group = SPP, 
-                   colour = SPP)) + 
-  geom_line(aes(x = Treatment, 
-                y = fit, 
-                group = SPP, 
-                colour = SPP)) +
-  theme(legend.position = 'none') + 
-  labs(x = 'Treatment', 
-       y = "Percent difference [%]")
+naov_TRTSPPeff <- left_join(naov_TRTSPPeff, treatments) %>% 
+  mutate(label = c('a', 'a', 'a', 'a', 
+                   'a', 'ab', 'a', 'b', 
+                   'a', 'ab', 'b', 'b', 
+                   'a', 'ab', 'ab', 'b', 
+                   'a', 'a', 'a', 'b'))
 
 
-ggplot(naov_TRTSPPeff) + 
-  geom_pointrange(aes(x = TRT, 
-                   y = fit, 
-                   ymin = lower, 
-                   ymax = upper, 
-                   group = SPP, 
-                   colour = SPP), 
+ggplot(naov_TRTSPPeff, aes(x = TRT, y = fit)) + 
+  geom_pointrange(aes(ymin = lower, 
+                      ymax = upper, 
+                      group = SPP, 
+                      colour = SPP), 
                   fatten = 2.5) + 
   geom_line(aes(x = TRT, 
                 y = fit, 
                 group = SPP, 
-                colour = SPP)) +
+                colour = SPP)) + 
+  geom_text(aes(label = label, 
+                colour = SPP), 
+            nudge_x = -0.05, 
+            nudge_y = 3, 
+            hjust = 1, 
+            vjust = 0, 
+            size = 3) + 
   facet_wrap(~SPP) + 
   theme(legend.position = 'none') + 
   labs(x = 'Treatment', 
-       y = "Percent difference [%]")
+       y = "Growth response [%]")
 ```
 
 ```{r}
 library(emmeans)
 
-emmeans(d20_naov, list(pairwise ~ Treatment), adjust = 'tukey')
+emmeans(d20_naov, list(revpairwise ~ Treatment), adjust = 'tukey')
 
 emmeans(d20_naov, list(pairwise ~ SPP), adjust = 'tukey')
 
 emmeans(d20_naov, list(revpairwise ~ SPP | Treatment), adjust = 'tukey')
 emmeans(d20_naov, list(revpairwise ~ Treatment | SPP), adjust = 'tukey')
+```
 
-emmip(d20_naov, SPP ~ Treatment) + labs(x = 'Treatment', y = 'Percent difference [%]')
+```{r}
+emmip(d20_naov, SPP ~ Treatment, CIs = T) + labs(x = 'Treatment', y = 'Percent difference [%]')
 ```
 
 ```{r}
 TRTSPP_pairs <- as.data.frame(emmeans(d20_naov, list(revpairwise ~ Treatment | SPP), adjust = 'tukey')$`pairwise differences of Treatment | SPP`)
 
-write_excel_csv(TRTSPP_pairs, "/Users/kanerussell/Documents/MF/TAYSR/R Code/MF_TAYSR.TRTSPP_pairs.csv")
+TRT_pairs <- as.data.frame(emmeans(d20_naov, list(revpairwise ~ Treatment), adjust = 'tukey')$`pairwise differences of Treatment`)
+
+SPP_pairs <- as.data.frame(emmeans(d20_naov, list(pairwise ~ SPP), adjust = 'tukey')$`pairwise differences of SPP`)
+
+#write_excel_csv(SPP_pairs, "/Users/kanerussell/Documents/MF/TAYSR/R Code/MF_TAYSR.SPP_pairs.csv")
+#write_excel_csv(TRT_pairs, "/Users/kanerussell/Documents/MF/TAYSR/R Code/MF_TAYSR.TRT_pairs.csv")
+#write_excel_csv(TRTSPP_pairs, "/Users/kanerussell/Documents/MF/TAYSR/R Code/MF_TAYSR.TRTSPP_pairs.csv")
+```
+
+```{r}
+d20_sum <- d20_noGS %>% 
+  group_by(TRT, SPP) %>% 
+  summarise(n = n())
+
+#write_excel_csv(d20_sum, "/Users/kanerussell/Documents/MF/TAYSR/R Code/d20_sum.csv")
 ```
 
