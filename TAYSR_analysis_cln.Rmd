@@ -1,0 +1,401 @@
+---
+title: "TAYSR_analysis_cln"
+author: "Kane Russell"
+date: "9/8/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Individual-level growth response
+
+```{r}
+treatments <- data.frame(TRT = as.factor(c("M", "MH", "MBB", "BB")), 
+                         Treatment = as.factor(c("Mastication only", 
+                                       "Mastication + herbicide", 
+                                       "Mastication + burn", 
+                                       "Burn only" ))) %>% 
+              mutate(Treatment = fct_relevel(Treatment, "Burn only", 
+                                             "Mastication only", 
+                                             "Mastication + burn", 
+                                             "Mastication + herbicide"), 
+                     TRT = fct_relevel(TRT, c('BB', 'M', 'MBB', 'MH')))
+
+d20 <- 
+  read.csv("TAYSR_2020_ALL.csv") %>% 
+  mutate(COMP = as.factor(COMP), 
+         COMPGAP = as.factor(COMPGAP), 
+         TRT = fct_relevel(TRT, c('BB', 'M', 'MBB', 'MH')), 
+         SPP = fct_relevel(SPP, c('PP', 'IC', 'WF', 'SP', 'DF')), 
+         P.NP = as.factor(P.NP), 
+         REPL = as.factor(REPL), 
+         scPDIF = scale(PER_DIFF)) %>% 
+  left_join(treatments)
+
+d20
+```
+
+```{r}
+d20_lm <- lm(scPDIF ~ TRT*SPP + REPL, data = d20)
+
+op <- par(mfrow = c(2, 2), mar = c(4, 4, 2, 2))
+plot(d20_lm, which = c(1))
+plot(d20$TRT, resid(d20_lm), xlab = "TRT", ylab = "Residuals")
+plot(d20$SPP, resid(d20_lm), xlab = "SPP", ylab = "Residuals")
+plot(d20$COMPGAP, resid(d20_lm), xlab = "COMPGAP", ylab = "Residuals")
+par(op)
+
+ggplot() + geom_histogram(aes(x = resid(d20_lm)))
+
+op <- par(mfrow = c(2, 2), mar = c(4, 4, 2, 2))
+plot(d20_lm)
+par(op)
+
+shapiro.test(residuals(d20_lm))
+car::leveneTest(PER_DIFF ~ TRT, data = d20)
+```
+
+
+```{r}
+d20_cln <- d20[-c(358, 329, 248, 213, 172, 92, 5, 2, 401, 424, 374, 87, 96, 253, 194),]
+
+d20_noGS <- d20_cln %>% 
+  filter(SPP != 'GS')
+
+
+```
+
+```{r}
+d20_TRT_mean <- d20_noGS %>% 
+  group_by(Treatment) %>% 
+  summarise(mean = mean(PER_DIFF))
+
+d20_SPP_mean <- d20_noGS %>% 
+  group_by(SPP) %>% 
+  summarise(mean = mean(PER_DIFF))
+
+
+d20_TRTSPP_mean <- d20_noGS %>% 
+  group_by(Treatment, SPP) %>% 
+  summarise(mean = mean(PER_DIFF)) 
+```
+
+```{r}
+d20_TRTREPL_mean <- d20_noGS %>% 
+  group_by(Treatment, REPL) %>% 
+  summarise(mean = mean(PER_DIFF))
+
+ggplot() + 
+  geom_boxplot(data = d20_TRTREPL_mean, 
+               aes(x = Treatment, 
+                   y = mean, 
+                   colour = Treatment)) + 
+  geom_point(data = d20_TRT_mean,
+             aes(x = Treatment,
+                 y = mean),
+             col = "red",
+             pch = 4,
+             size = 2) +
+  labs(x = "Treatment", 
+       y = "Growth response [%]") + 
+  theme(legend.position = 'none')
+```
+
+```{r}
+d20_SPPREPL_mean <- d20_noGS %>% 
+  group_by(SPP, REPL) %>% 
+  summarise(mean = mean(PER_DIFF))
+
+ggplot() + 
+  geom_boxplot(data = d20_SPPREPL_mean, 
+               aes(x = SPP, 
+                   y = mean, 
+                   colour = SPP)) + 
+  geom_point(data = d20_SPP_mean, 
+             aes(x = SPP, 
+                 y = mean), 
+             col = "red", 
+             pch = 4, 
+             size = 2) + 
+  labs(x = "Species", 
+       y = "Growth response [%]") + 
+  theme(legend.position = "none")
+```
+
+```{r}
+d20_TRTSPP_mean <- d20_noGS %>% 
+  group_by(Treatment, SPP) %>% 
+  summarise(mean = mean(PER_DIFF))
+
+ggplot() + 
+  geom_boxplot(data = d20_TRTREPL_mean, 
+               aes(x = Treatment,
+                   y = mean)) + 
+  labs(x = "Treatment", 
+       y = "Growth response [%]") + 
+  geom_line(data = d20_TRTSPP_mean, 
+            aes(x = Treatment, 
+                y = mean, 
+                group = SPP, 
+                colour = SPP)) + 
+  geom_point(data = d20_TRTSPP_mean, 
+             aes(x = Treatment, 
+                 y = mean, 
+                 colour = SPP), 
+             size = 0.8)
+```
+
+```{r}
+d20_SPPTRT_mean <- d20_noGS %>% 
+  group_by(SPP, Treatment) %>% 
+  summarise(mean = mean(PER_DIFF))
+
+ggplot() + 
+  geom_boxplot(data = d20_SPPREPL_mean, 
+               aes(x = SPP,
+                   y = mean)) + 
+  labs(x = "Species", 
+       y = "Growth response [%]") + 
+  geom_line(data = d20_SPPTRT_mean, 
+            aes(x = SPP, 
+                y = mean, 
+                group = Treatment, 
+                colour = Treatment)) + 
+  geom_point(data = d20_SPPTRT_mean, 
+             aes(x = SPP, 
+                 y = mean, 
+                 colour = Treatment), 
+             size = 0.8)
+```
+
+
+```{r}
+d20_naov1 <- lmerTest::lmer(PER_DIFF ~ Treatment*SPP + (Treatment | REPL), data = d20_noGS)
+
+
+summary(d20_naov)
+
+plot(fitted(d20_naov), residuals(d20_naov, type = "pearson",
+    scaled = TRUE))
+
+qqnorm(resid(d20_naov))
+qqline(resid(d20_naov))
+```
+
+```{r}
+emmeans(d20_naov, list(revpairwise ~ Treatment), adjust = 'tukey')
+
+naov_TRTeff <- as.data.frame(emmeans(d20_naov, list(revpairwise ~ Treatment), adjust = 'tukey')$`emmeans of Treatment`) %>% 
+  mutate(label = c('a', 'a', 'ab', 'b'))
+
+ggplot(data = naov_TRTeff,
+       aes(y = emmean,
+           x = Treatment)) + 
+  geom_pointrange(aes(ymin = lower.CL,
+                      ymax = upper.CL, 
+                      colour = Treatment),
+                  fatten = 2.5) + 
+  geom_text(aes(label = label, 
+                colour = Treatment), 
+            nudge_x = -0.03, 
+            nudge_y = 1, 
+            hjust = 1, 
+            vjust = 0, 
+            size = 3) +
+  labs(y = "Growth response [%]",
+       x = 'Treatment') + 
+  theme(legend.position = 'none')
+```
+
+
+```{r}
+emmeans(d20_naov, list(pairwise ~ SPP), adjust = 'tukey')
+
+naov_SPPeff <- as.data.frame(emmeans(d20_naov, list(revpairwise ~ SPP), adjust = 'tukey')$`emmeans of SPP`) %>% 
+  mutate(label = c('a', 'ab', 'bc', 'c', 'c'))
+
+ggplot(data = naov_SPPeff,
+                  aes(x = SPP,
+                      y = emmean)) + 
+  geom_pointrange(aes(ymin = lower.CL,
+                      ymax = upper.CL, 
+                      colour = SPP),
+                  fatten = 2.5) + 
+  geom_text(aes(label = label, 
+                colour = SPP), 
+            nudge_x = -0.05, 
+            nudge_y = 0.5, 
+            hjust = 1, 
+            vjust = 0, 
+            size = 3) + 
+  labs(y = "Growth response [%]",
+       x = 'Species') + 
+  theme(legend.position = 'none')
+```
+
+```{r}
+emmeans(d20_naov, list(revpairwise ~ SPP | Treatment), adjust = 'tukey')
+
+
+naov_TRTSPPeff <- as.data.frame(emmeans(d20_naov, list(revpairwise ~ Treatment | SPP), adjust = 'tukey')$`emmeans of Treatment | SPP`) %>% 
+  left_join(treatments) %>% 
+  mutate(label = c('a', 'ab', 'b', 'b', 
+                   'a', 'ab', 'a', 'b', 
+                   'a', 'a', 'a', 'b', 
+                   'a', 'ab', 'ab', 'b', 
+                   'a', 'a', 'a', 'a'))
+
+
+ggplot(naov_TRTSPPeff, aes(x = TRT, 
+                           y = emmean)) + 
+  geom_pointrange(aes(ymin = lower.CL, 
+                      ymax = upper.CL, 
+                      group = SPP, 
+                      colour = SPP), 
+                  fatten = 2.5) + 
+  geom_line(aes(group = SPP, 
+                colour = SPP)) + 
+  geom_text(aes(label = label, 
+                colour = SPP), 
+            nudge_x = -0.05, 
+            nudge_y = 3, 
+            hjust = 1, 
+            vjust = 0, 
+            size = 3) + 
+  facet_wrap(~SPP) + 
+  theme(legend.position = 'none') + 
+  labs(x = 'Treatment', 
+       y = "Growth response [%]")
+```
+
+```{r}
+emmip(d20_naov, SPP ~ Treatment, CIs = T) + 
+  labs(x = 'Treatment', y = 'Growth response [%]')
+```
+
+```{r}
+emmeans(d20_naov, list(revpairwise ~ SPP | Treatment), adjust = 'tukey')
+
+naov_SPPTRTeff <- as.data.frame(emmeans(d20_naov, list(revpairwise ~ SPP | Treatment), adjust = 'tukey')$`emmeans of SPP | Treatment`) %>% 
+  mutate(label = c('a', 'a', 'ab', 'ab', 'b', 
+                   'a', 'a', 'a', 'a', 'a', 
+                   'ab', 'a', 'ab', 'ab', 'b', 
+                   'a', 'b', 'b', 'b', 'b'))
+
+
+ggplot(naov_SPPTRTeff, aes(x = SPP, y = emmean)) + 
+  geom_pointrange(aes(ymin = lower.CL, 
+                      ymax = upper.CL, 
+                      group = Treatment, 
+                      colour = Treatment), 
+                  fatten = 2.5) + 
+  geom_line(aes(group = Treatment, 
+                colour = Treatment)) + 
+  geom_text(aes(label = label,
+                colour = Treatment),
+            nudge_x = -0.05,
+            nudge_y = 3,
+            hjust = 1,
+            vjust = 0,
+            size = 3) +
+  facet_wrap(~Treatment) + 
+  theme(legend.position = 'none') + 
+  labs(x = 'Species', 
+       y = "Growth response [%]")
+```
+
+```{r}
+emmip(d20_naov, Treatment ~ SPP, CIs = T) +
+  labs(x = 'Species', y = 'Growth response [%]')
+```
+
+## Stand-level growth response
+
+```{r}
+d13 <- read.csv('TAYSR_2013_ALL.csv')
+d18 <- read.csv('TAYSR_2018_ALL.csv')
+plotsize_13_18 <- read.csv('plotsize_13_18.csv')
+```
+
+```{r}
+dBA13 <- 
+  d13 %>% 
+  mutate(BA = (pi*(DBH/24)^2)) %>%
+  group_by(TRT, COMPGAP) %>% 
+  summarise(sumBA = sum(BA)) %>% 
+  left_join(plotsize_13_18) %>% 
+  mutate(BA13_AC = sumBA/SIZE13_AC)
+
+dBA18 <- 
+  d18 %>% 
+  mutate(BA = (pi*(DBH/24)^2)) %>%
+  group_by(TRT, COMPGAP) %>% 
+  summarise(sumBA = sum(BA)) %>% 
+  left_join(plotsize_13_18) %>% 
+  mutate(BA18_AC = sumBA/SIZE18_AC)
+
+d13_18BA <- 
+  dBA13 %>% left_join(dBA18, by = c("COMPGAP" = "COMPGAP")) %>% 
+  mutate(BA13_18 = (BA18_AC - BA13_AC)/(BA13_AC*5)*100) %>% 
+  select(TRT.x, COMPGAP, SIZE13_AC.x, SIZE18_AC.x, BA13_AC, BA18_AC, BA13_18) %>% 
+  left_join(treatments, by = c('TRT.x' = 'TRT')) %>% 
+  mutate(COMPGAP = as.factor(COMPGAP), 
+         TRT.x = as.factor(TRT.x))
+colnames(d13_18BA) <- (c("TRT", "COMPGAP", "SIZE13_AC", "SIZE18_AC", "BA13_AC", "BA18_AC", "BA13_18", "Treatment"))
+
+d13_18BA
+```
+
+```{r}
+BA_mean <- 
+  d13_18BA %>% 
+  group_by(Treatment) %>% 
+  summarise(mean = mean(BA13_18))
+
+ggplot(d13_18BA) + 
+  geom_boxplot(aes(x = Treatment, y = BA13_18, colour = Treatment)) + 
+  geom_point(data = BA_mean, aes(x = Treatment, y = mean), col = "red", pch = 4, size = 2) + 
+  labs(x = 'Treatment', 
+       y = 'Relativized basal area increment [%/yr]') + 
+  theme(legend.position = 'none')
+```
+
+```{r}
+SBA_lm <- lm(BA13_18 ~ TRT, d13_18BA)
+plot(SBA_lm)
+
+shapiro.test(residuals(SBA_lm))
+car::leveneTest(BA13_18 ~ TRT, d13_18BA)
+
+SBA_aov <- aov(data = d13_18BA, formula = BA13_18 ~ Treatment)
+summary(SBA_aov)
+SBA_Tuk <- TukeyHSD(SBA_aov)
+SBA_Tuk
+
+SBA_pairs <- emmeans(SBA_aov, list(revpairwise ~ Treatment), adjust = 'tukey')
+SBA_pairs
+```
+
+```{r}
+BAeff <- as.data.frame(SBA_pairs$`emmeans of Treatment`)
+
+ggplot(BAeff, aes(x = Treatment, 
+                  y = emmean)) + 
+  geom_pointrange(aes(ymin = lower.CL, 
+                      ymax = upper.CL, 
+                      colour = Treatment), 
+                  fatten = 2.5) + 
+  geom_text(aes(label = c('a', 'ab', 'a', 'b'), 
+                colour = Treatment), 
+            nudge_x = -0.02, 
+            nudge_y = 2, 
+            hjust = 1, 
+            vjust = 0, 
+            size = 3) + 
+  labs(x = 'Treatment', 
+       y = 'Relativized basal area increment [%/yr]') + 
+  theme(legend.position = 'none')
+```
+

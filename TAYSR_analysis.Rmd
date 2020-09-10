@@ -108,7 +108,8 @@ plot(d20_cln_Tuk)
 
 ```{r}
 d20_noGS <- d20_cln %>% 
-  filter(SPP != 'GS')
+  filter(SPP != 'GS') %>% 
+  mutate(SPP = fct_relevel(SPP, c('PP', 'IC', 'WF', 'SP', 'DF')))
 ```
 
 
@@ -287,9 +288,6 @@ ggplot(BAeff, aes(x = Treatment,
 
 ```
 
-```{r}
-emm
-```
 
 
 ```{r}
@@ -333,18 +331,30 @@ plot_model(d20_naov, type = "pred", terms = "Treatment", sort.est = TRUE) +
 ```{r}
 naov_TRTSPPeff <- as.data.frame(effect('Treatment*SPP', d20_naov))
 
-naov_TRTeff <- as.data.frame(effect("Treatment", d20_naov))
+naov_TRTeff <- as.data.frame(effect("Treatment", d20_naov)) %>% 
+  mutate(Treatment = fct_relevel(Treatment, c("Burn only", 
+                                             "Mastication only", 
+                                             "Mastication + burn", 
+                                             "Mastication + herbicide")))
 
 
-ggplot() + 
-  geom_pointrange(data = naov_TRTeff,
-                  aes(y = fit,
-                      x = reorder(Treatment, fit, median),
-                      ymin = lower,
-                      ymax = upper),
+ggplot(data = naov_TRTeff,
+       aes(y = fit,
+           x = Treatment)) + 
+  geom_pointrange(aes(ymin = lower,
+                      ymax = upper, 
+                      colour = Treatment),
                   fatten = 2.5) + 
-  labs(y = "Percent difference [%]",
-       x = 'Treatment')
+  geom_text(aes(label = c('a', 'a', 'ab', 'b'), 
+                colour = Treatment), 
+            nudge_x = -0.03, 
+            nudge_y = 1, 
+            hjust = 1, 
+            vjust = 0, 
+            size = 3) +
+  labs(y = "Growth response [%]",
+       x = 'Treatment') + 
+  theme(legend.position = 'none')
 
 
 ggplot() + 
@@ -375,15 +385,21 @@ ggplot() +
 ```{r}
 naov_SPPeff <- as.data.frame(effect('SPP', d20_naov))
 
-ggplot() + 
-  geom_pointrange(data = naov_SPPeff,
+ggplot(data = naov_SPPeff,
                   aes(y = fit,
-                      x = reorder(x = SPP, X = fit, FUN = mean),
-                      ymin = lower,
+                      x = reorder(x = SPP, X = fit, FUN = mean))) + 
+  geom_pointrange(aes(ymin = lower,
                       ymax = upper, 
                       colour = SPP),
-                  fatten = 2.5) +
-  labs(y = "Percent difference [%]",
+                  fatten = 2.5) + 
+  geom_text(aes(label = c('c', 'ab', 'a', 'c', 'bc'), 
+                colour = SPP), 
+            nudge_x = -0.05, 
+            nudge_y = 0.5, 
+            hjust = 1, 
+            vjust = 0, 
+            size = 3) + 
+  labs(y = "Growth response [%]",
        x = 'Species') + 
   theme(legend.position = 'none')
 ```
@@ -391,23 +407,24 @@ ggplot() +
 ```{r}
 #plot(effect('Treatment*SPP', d20_naov))
 
-naov_TRTSPPeff <- left_join(naov_TRTSPPeff, treatments) %>% 
+naov_TRTSPPeff <- as.data.frame(emmeans(d20_naov, list(revpairwise ~ Treatment | SPP), adjust = 'tukey')$`emmeans of Treatment | SPP`) %>% 
+  left_join(treatments) %>% 
   mutate(label = c('a', 'a', 'a', 'a', 
                    'a', 'ab', 'a', 'b', 
                    'a', 'ab', 'b', 'b', 
                    'a', 'ab', 'ab', 'b', 
-                   'a', 'a', 'a', 'b'))
+                   'a', 'a', 'a', 'b'))#, 
+         #SPP = fct_relevel(SPP, c('PP', 'IC', 'WF', 'SP', 'DF')))
+  
 
 
-ggplot(naov_TRTSPPeff, aes(x = TRT, y = fit)) + 
-  geom_pointrange(aes(ymin = lower, 
-                      ymax = upper, 
+ggplot(naov_TRTSPPeff, aes(x = TRT, y = emmean)) + 
+  geom_pointrange(aes(ymin = lower.CL, 
+                      ymax = upper.CL, 
                       group = SPP, 
                       colour = SPP), 
                   fatten = 2.5) + 
-  geom_line(aes(x = TRT, 
-                y = fit, 
-                group = SPP, 
+  geom_line(aes(group = SPP, 
                 colour = SPP)) + 
   geom_text(aes(label = label, 
                 colour = SPP), 
@@ -423,6 +440,38 @@ ggplot(naov_TRTSPPeff, aes(x = TRT, y = fit)) +
 ```
 
 ```{r}
+
+naov_SPPTRTeff <- as.data.frame(emmeans(d20_naov, list(revpairwise ~ SPP | Treatment), adjust = 'tukey')$`emmeans of SPP | Treatment`) %>% 
+  mutate(label = c('b', 'a', 'a', 'ab', 'ab',
+                   'a', 'a', 'a', 'a', 'a',
+                   'b', 'a', 'ab', 'ab', 'ab',
+                   'b', 'b', 'a', 'b', 'b'), 
+         SPP = fct_relevel(SPP, c('PP', 'IC', 'WF', 'SP', 'DF')))
+
+
+ggplot(naov_SPPTRTeff, aes(x = SPP, y = emmean)) + 
+  geom_pointrange(aes(ymin = lower.CL, 
+                      ymax = upper.CL, 
+                      group = Treatment, 
+                      colour = Treatment), 
+                  fatten = 2.5) + 
+  geom_line(aes(group = Treatment, 
+                colour = Treatment)) + 
+  geom_text(aes(label = label,
+                colour = Treatment),
+            nudge_x = -0.05,
+            nudge_y = 3,
+            hjust = 1,
+            vjust = 0,
+            size = 3) +
+  facet_wrap(~Treatment) + 
+  theme(legend.position = 'none') + 
+  labs(x = 'Species', 
+       y = "Growth response [%]")
+```
+
+
+```{r}
 library(emmeans)
 
 emmeans(d20_naov, list(revpairwise ~ Treatment), adjust = 'tukey')
@@ -434,7 +483,10 @@ emmeans(d20_naov, list(revpairwise ~ Treatment | SPP), adjust = 'tukey')
 ```
 
 ```{r}
-emmip(d20_naov, SPP ~ Treatment, CIs = T) + labs(x = 'Treatment', y = 'Percent difference [%]')
+emmip(d20_naov, SPP ~ Treatment, CIs = T) + labs(x = 'Treatment', y = 'Growth response [%]')
+
+emmip(d20_naov, Treatment ~ SPP, CIs = T) +
+  labs(x = 'Species', y = 'Growth response [%]')
 ```
 
 ```{r}
@@ -444,6 +496,9 @@ TRT_pairs <- as.data.frame(emmeans(d20_naov, list(revpairwise ~ Treatment), adju
 
 SPP_pairs <- as.data.frame(emmeans(d20_naov, list(pairwise ~ SPP), adjust = 'tukey')$`pairwise differences of SPP`)
 
+SPPTRT_pairs <- as.data.frame(emmeans(d20_naov, list(revpairwise ~ SPP | Treatment), adjust = 'tukey')$`pairwise differences of SPP | Treatment`)
+
+#write_excel_csv(SPPTRT_pairs, "/Users/kanerussell/Documents/MF/TAYSR/R Code/SPPTRT_pairs.csv")
 #write_excel_csv(SPP_pairs, "/Users/kanerussell/Documents/MF/TAYSR/R Code/MF_TAYSR.SPP_pairs.csv")
 #write_excel_csv(TRT_pairs, "/Users/kanerussell/Documents/MF/TAYSR/R Code/MF_TAYSR.TRT_pairs.csv")
 #write_excel_csv(TRTSPP_pairs, "/Users/kanerussell/Documents/MF/TAYSR/R Code/MF_TAYSR.TRTSPP_pairs.csv")
